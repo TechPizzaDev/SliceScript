@@ -1,0 +1,17 @@
+﻿using System;
+
+namespace Script1
+{
+	public class Fruit
+	{
+		private void Method1()
+		{
+
+		}
+
+		void Method2() 
+		{
+
+		}
+	}
+}
