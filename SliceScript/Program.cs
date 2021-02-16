@@ -52,80 +52,136 @@ namespace SliceScript
             }
         }
 
-        static bool GetWord(ref UnicodeGroupEnumerator enumerator, out Range range)
+        delegate bool GetPredicate<T>(ref UnicodeGroupIterator iterator, ref T state);
+        delegate bool GetPredicate(ref UnicodeGroupIterator iterator);
+
+        static bool Get<T>(
+            ref UnicodeGroupIterator iterator,
+            GetPredicate<T> startPredicate,
+            GetPredicate<T> restPredicate,
+            ref T state,
+            out Range range)
         {
-            if (!enumerator.MoveNext() ||
-                !enumerator.Category.IsLetter())
+            if (!iterator.MoveNext(out int consumed) ||
+                !startPredicate.Invoke(ref iterator, ref state))
             {
                 range = default;
                 return false;
             }
 
-            range = enumerator.Current;
+            iterator.Move(consumed);
+            range = iterator.Current;
 
-            while (enumerator.MoveNext())
+            while (iterator.MoveNext(out consumed))
             {
-                if (!enumerator.Category.IsLetter())
+                if (!restPredicate(ref iterator, ref state))
                     break;
 
-                range = new Range(range.Start, enumerator.Current.End);
+                iterator.Move(consumed);
+                range = new Range(range.Start, iterator.Current.End);
             }
 
             return true;
         }
 
-        static bool GetWordWithNumbers(ref UnicodeGroupEnumerator enumerator, bool canStartWithNumber, out Range range)
+        static bool Get(
+            ref UnicodeGroupIterator iterator,
+            GetPredicate startPredicate,
+            GetPredicate restPredicate,
+            out Range range)
         {
-            if (!enumerator.MoveNext() ||
-                !(enumerator.Category.IsLetter() || enumerator.Category.IsNumber()) ||
-                (!canStartWithNumber && enumerator.Category.IsNumber()))
+            if (!iterator.MoveNext(out int consumed) ||
+                !startPredicate.Invoke(ref iterator))
             {
                 range = default;
                 return false;
             }
 
-            range = enumerator.Current;
+            iterator.Move(consumed);
+            range = iterator.Current;
 
-            while (enumerator.MoveNext())
+            while (iterator.MoveNext(out consumed))
             {
-                if (!enumerator.Category.IsLetterOrNumber())
+                if (!restPredicate(ref iterator))
                     break;
 
-                range = new Range(range.Start, enumerator.Current.End);
+                iterator.Move(consumed);
+                range = new Range(range.Start, iterator.Current.End);
             }
 
             return true;
         }
 
-        static bool GetNumber(ref UnicodeGroupEnumerator enumerator, out Range range)
+        static bool GetWord(ref UnicodeGroupIterator iterator, out Range range)
         {
-            if (!enumerator.MoveNext() ||
-                !enumerator.Category.IsNumber())
+            static bool predicate(ref UnicodeGroupIterator iterator) => iterator.Category.IsLetter();
+            return Get(ref iterator, predicate, predicate, out range);
+        }
+
+        static bool GetWordWithNumbers(ref UnicodeGroupIterator iterator, bool canStartWithNumber, out Range range)
+        {
+            static bool startPredicate(ref UnicodeGroupIterator iterator, ref bool canStartWithNumber)
             {
-                range = default;
-                return false;
+                return !iterator.Category.IsLetterOrNumber()
+                    || (!canStartWithNumber && iterator.Category.IsNumber());
             }
-
-            range = enumerator.Current;
-
-            while (enumerator.MoveNext())
+            static bool restPredicate(ref UnicodeGroupIterator iterator, ref bool canStartWithNumber)
             {
-                if (!enumerator.Category.IsNumber())
-                    break;
-
-                range = new Range(range.Start, enumerator.Current.End);
+                return iterator.Category.IsLetter();
             }
+            return Get(ref iterator, startPredicate, restPredicate, ref canStartWithNumber, out range);
+        }
 
-            return true;
+        static bool GetNumber(ref UnicodeGroupIterator iterator, out Range range)
+        {
+            static bool predicate(ref UnicodeGroupIterator iterator) => iterator.Category.IsNumber();
+            return Get(ref iterator, predicate, predicate, out range);
+        }
+
+        static bool GetSpaceSeparator(ref UnicodeGroupIterator iterator, out Range range)
+        {
+            static bool predicate(ref UnicodeGroupIterator iterator) => iterator.Category.IsWhiteSpace();
+            return Get(ref iterator, predicate, predicate, out range);
+        }
+
+        static bool GetOtherPunctuation(ref UnicodeGroupIterator iterator, out Range range)
+        {
+            static bool predicate(ref UnicodeGroupIterator iterator) => iterator.Category.IsOtherPunctuation();
+            return Get(ref iterator, predicate, predicate, out range);
+        }
+
+        static Range? GetWord(ref UnicodeGroupIterator iterator)
+        {
+            if (GetWord(ref iterator, out Range range))
+                return range;
+            return null;
         }
 
         static void ParseScript(ReadOnlyMemory<byte> source)
         {
-            UnicodeGroupEnumerator rootEnumerator = new(source.Span);
+            UnicodeGroupIterator rootIterator = new(source.Span);
 
-            UnicodeGroupEnumerator enumerator = rootEnumerator;
+            UnicodeGroupIterator iterator = rootIterator;
 
+            GetSpaceSeparator(ref iterator, out Range firstSpace);
+            if (GetWord(ref iterator, out Range firstWord))
+            {
+                if (GetSpaceSeparator(ref iterator, out Range secondSpace))
+                {
+                    if (GetWord(ref iterator, out Range secondWord))
+                    {
+                        GetSpaceSeparator(ref iterator, out Range thirdSpace);
+                        GetOtherPunctuation(ref iterator, out Range firstPunctuation);
 
+                        Console.WriteLine("\"" + Encoding.UTF8.GetString(source[firstSpace].Span) + "\"");
+                        Console.WriteLine("\"" + Encoding.UTF8.GetString(source[firstWord].Span) + "\"");
+                        Console.WriteLine("\"" + Encoding.UTF8.GetString(source[secondSpace].Span) + "\"");
+                        Console.WriteLine("\"" + Encoding.UTF8.GetString(source[secondWord].Span) + "\"");
+                        Console.WriteLine("\"" + Encoding.UTF8.GetString(source[thirdSpace].Span) + "\"");
+                        Console.WriteLine("\"" + Encoding.UTF8.GetString(source[firstPunctuation].Span) + "\"");
+                    }
+                }
+            }
 
             //Stack<ParseScope> scopeStack = new();
             //

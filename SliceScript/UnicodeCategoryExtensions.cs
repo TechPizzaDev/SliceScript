@@ -21,5 +21,15 @@ namespace SliceScript
                 || category == UnicodeCategory.UppercaseLetter 
                 || category == UnicodeCategory.DecimalDigitNumber;
         }
+
+        public static bool IsWhiteSpace(this UnicodeCategory category)
+        {
+            return category == UnicodeCategory.SpaceSeparator;
+        }
+
+        public static bool IsOtherPunctuation(this UnicodeCategory category)
+        {
+            return category == UnicodeCategory.OtherPunctuation;
+        }
     }
 }

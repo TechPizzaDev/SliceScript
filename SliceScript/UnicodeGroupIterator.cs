@@ -5,40 +5,46 @@ using System.Text;
 
 namespace SliceScript
 {
-    public ref struct UnicodeGroupEnumerator
+    public ref struct UnicodeGroupIterator
     {
-        private int _offset;
-
         public ReadOnlySpan<byte> Span { get; }
 
         public Range Current { get; private set; }
+        public int Offset { get; private set; }
         public UnicodeCategory Category { get; private set; }
-
-        public UnicodeGroupEnumerator(ReadOnlySpan<byte> span) : this()
+        
+        public UnicodeGroupIterator(ReadOnlySpan<byte> span) : this()
         {
             Span = span;
         }
 
-        public bool MoveNext()
+        public void Move(int count)
         {
-            int start = _offset;
-            
+            Offset += count;
+        }
+
+        public bool MoveNext(out int consumed)
+        {
+            int index = Offset;
+
             UnicodeCategory? lastCategory = default;
             OperationStatus status;
-            while ((status = Rune.DecodeFromUtf8(Span[_offset..], out Rune rune, out int consumed)) == OperationStatus.Done)
+            while ((status = Rune.DecodeFromUtf8(Span[index..], out Rune rune, out int consumedUtf8)) == OperationStatus.Done)
             {
                 UnicodeCategory category = Rune.GetUnicodeCategory(rune);
                 if (lastCategory.HasValue && category != lastCategory)
                 {
-                    Current = new Range(start, _offset);
+                    Current = new Range(Offset, index);
                     Category = lastCategory.GetValueOrDefault();
+                    consumed = index - Offset;
                     return true;
                 }
 
                 lastCategory = category;
-                _offset += consumed;
+                index += consumedUtf8;
             }
 
+            consumed = 0;
             return false;
 
             //int next;
@@ -75,7 +81,7 @@ namespace SliceScript
             //return false;
         }
 
-        public UnicodeGroupEnumerator GetEnumerator()
+        public UnicodeGroupIterator GetEnumerator()
         {
             return this;
         }
